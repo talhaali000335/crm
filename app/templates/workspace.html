@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block body %}
+<style>.ws{display:grid;grid-template-columns:200px 1fr 260px;gap:14px;height:calc(100vh - 48px)}
+.col{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:12px;overflow:auto}
+.th{display:flex;justify-content:space-between;padding:7px 8px;border-radius:8px;text-decoration:none;color:#334155}.th.on,.th:hover{background:#eef2ff}
+.chat{display:flex;flex-direction:column;padding:0}#log{flex:1;overflow:auto;padding:14px}
+.msg{padding:9px 13px;border-radius:12px;margin:8px 0;max-width:85%;line-height:1.45}.user{background:#dbeafe;margin-left:auto}.bot{background:#f1f5f9}
+.bar{border-top:1px solid var(--bd);padding:10px;display:flex;gap:8px}.chips{padding:0 14px 8px}.chip{cursor:pointer}
+details{margin-top:6px}label.opt{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+@media(max-width:900px){.ws{grid-template-columns:1fr;height:auto}}</style>
+<div class="ws">
+<div class="col"><form method="get" action="/workspace/"><button style="width:100%">+ New chat</button></form><br>
+{% for x in threads %}<a class="th {% if t and t.id == x.id %}on{% endif %}" href="/workspace/{{ x.id }}/">{{ x.title|truncatechars:22 }}</a>{% endfor %}
+{% if t %}<hr><button class="ghost" id="ren">Rename</button>
+<form method="post" action="/thread/{{ t.id }}/delete/" style="display:inline" onsubmit="return confirm('Delete chat?')">{% csrf_token %}<button class="red">Delete</button></form>{% endif %}</div>
+<div class="col chat"><div id="log"></div><div class="chips" id="chips"></div>
+<div class="bar"><input id="in" placeholder="Ask anything about your CRM..." style="flex:1"><button id="go">Send</button></div></div>
+<div class="col"><b>Options</b>
+<label class="opt">Mode <select id="mode">{% for v,l in modes %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label>
+<label class="opt">Model <select id="model">{% for m in models %}<option>{{ m }}</option>{% endfor %}</select></label>
+<label class="opt">Scope <select id="scope"><option value="">All CRM + docs</option>{% for c in contacts %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
+<label class="opt">Top-K sources <input id="k" type="number" min="1" max="8" value="4" style="width:60px"></label>
+<label class="opt">Re-ranking <input id="rr" type="checkbox" checked></label>
+<label class="opt">Hallucination guard <input id="gd" type="checkbox" checked></label><hr>
+<b>Knowledge base</b>
+<form method="post" action="/docs/add/" enctype="multipart/form-data">{% csrf_token %}<input name="title" placeholder="Title" style="width:100%;margin:6px 0">
+<textarea name="content" rows="3" placeholder="Paste text..." style="width:100%"></textarea>
+<input type="file" name="file" accept=".txt,.md,.csv" style="width:100%;margin:6px 0"><button style="width:100%">Add document</button></form>
+{% for d in docs %}<div class="mut" style="margin-top:6px">{{ d.title|truncatechars:26 }}
+<form method="post" action="/docs/{{ d.id }}/delete/" style="display:inline">{% csrf_token %}<button class="ghost" style="padding:0 6px">x</button></form></div>{% endfor %}</div></div>
+{{ hist|json_script:"hist" }}
+<script>
+const $=i=>document.getElementById(i),log=$('log');let TID={{ t.id|default:'null' }};
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const md=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+const f=v=>v==null?'-':v;
+function add(role,text,meta){const d=document.createElement('div');d.className='msg '+(role==='user'?'user':'bot');d.innerHTML=md(text);
+ if(meta&&meta.trace&&meta.trace.model){const v=meta.verdict||{},t=meta.trace,s=meta.sources||[];
+  let h='<div class="mut" style="margin-top:6px"><span class="pill">'+t.mode+'</span><span class="pill">'+t.model+'</span><span class="pill">'+t.latency_ms+' ms</span>'+
+  (v.grounded?'<span class="ok">grounded</span>':'<span class="bad">guardrail: '+esc(v.note||'')+'</span>')+(t.retries?' <span class="mut">(retried)</span>':'')+'</div>';
+  if(s.length)h+='<details><summary class="mut">'+s.length+' sources (of '+t.candidates+' retrieved)</summary><table><tr><th>#</th><th>Source</th><th>BM25</th><th>TF-IDF</th><th>RRF</th><th>Rerank</th></tr>'+
+   s.map((x,i)=>'<tr><td>S'+(i+1)+'</td><td>'+esc(x.title)+'<br><small>'+esc(x.snippet)+'</small></td><td>'+f(x.bm25_rank)+'</td><td>'+f(x.tfidf_rank)+'</td><td>'+f(x.rrf)+'</td><td>'+f(x.rerank)+'</td></tr>').join('')+'</table></details>';
+  d.insertAdjacentHTML('beforeend',h)}
+ log.appendChild(d);d.scrollIntoView()}
+JSON.parse($('hist').textContent).forEach(m=>add(m.role,m.content,m.meta));
+const CH={ask:['Who are my open leads?','Which contacts mention pricing?'],summary:['Summarize my newest contact'],email:['Draft a follow-up email to my newest lead'],next:['What should I do this week?'],general:['Give me tips for cold-call openers']};
+function chips(){$('chips').innerHTML=(CH[$('mode').value]||[]).map(x=>'<span class="pill chip">'+x+'</span>').join('');
+ document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{$('in').value=c.textContent;$('in').focus()})}
+$('mode').onchange=chips;chips();
+async function send(){const t=$('in').value.trim();if(!t)return;$('in').value='';add('user',t);
+ const w=document.createElement('div');w.className='msg bot mut';w.textContent='Thinking...';log.appendChild(w);
+ const r=await post('/api/chat/',{message:t,thread_id:TID,mode:$('mode').value,model:$('model').value,contact_id:$('scope').value,top_k:$('k').value,rerank:$('rr').checked,guardrails:$('gd').checked});
+ w.remove();if(r.error)return add('bot','Error: '+r.error);
+ add('bot',r.answer,{sources:r.sources,verdict:r.verdict,trace:r.trace});
+ if(!TID){TID=r.thread_id;history.replaceState(null,'','/workspace/'+TID+'/');location.reload()}}
+$('go').onclick=send;$('in').onkeydown=e=>{if(e.key==='Enter')send()};
+if($('ren'))$('ren').onclick=async()=>{const n=prompt('New title');if(n){await post('/api/thread/rename/',{id:TID,title:n});location.reload()}};
+</script>{% endblock %}

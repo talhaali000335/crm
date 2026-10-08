@@ -1,0 +1,6 @@
+Django>=5.1,<5.2
+langgraph>=0.2
+langchain-core>=0.3
+langchain-groq>=0.2
+requests>=2.31
+gunicorn>=22.0

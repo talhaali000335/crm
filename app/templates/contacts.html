@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block body %}
+<div class="stats">{% for s in stats %}<div class="stat"><b>{{ s.n }}</b><span>{{ s.label }}</span></div>{% endfor %}</div>
+<div class="card"><h3 style="margin-top:0">{% if edit %}Edit{% else %}Add{% endif %} contact</h3>
+<form method="post">{% csrf_token %}<input type="hidden" name="id" value="{{ edit.id|default:'' }}">
+<div class="row"><input name="name" placeholder="Name *" value="{{ edit.name|default:'' }}" required>
+<input name="email" type="email" placeholder="Email" value="{{ edit.email|default:'' }}">
+<input name="phone" placeholder="Phone (+92...)" value="{{ edit.phone|default:'' }}">
+<input name="company" placeholder="Company" value="{{ edit.company|default:'' }}">
+<select name="status">{% for v,l in statuses %}<option value="{{ v }}" {% if edit.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div><br>
+<textarea name="notes" placeholder="Notes (the AI uses these)" style="width:100%" rows="2">{{ edit.notes|default:'' }}</textarea><br><br>
+<button>{% if edit %}Update{% else %}Add{% endif %}</button>{% if edit %} <a href="/">cancel</a>{% endif %}</form></div>
+<div class="card"><form class="row"><input name="q" placeholder="Search name/company" value="{{ q }}"><button>Search</button></form><br>
+<table><tr><th>Name</th><th>Contact</th><th>Company</th><th>Status</th><th></th></tr>
+{% for c in contacts %}<tr><td>{{ c.name }}<br><small>{{ c.notes|truncatechars:60 }}</small></td><td>{{ c.email }}<br>{{ c.phone }}</td>
+<td>{{ c.company }}</td><td><span class="pill">{{ c.get_status_display }}</span></td>
+<td style="white-space:nowrap"><a class="btn" href="/calls/?contact={{ c.id }}">Call</a> <a href="/?edit={{ c.id }}">edit</a>
+<form method="post" action="/delete/{{ c.id }}/" style="display:inline" onsubmit="return confirm('Delete?')">{% csrf_token %}<button class="red">x</button></form></td></tr>
+{% empty %}<tr><td colspan="5">No contacts yet.</td></tr>{% endfor %}</table></div>{% endblock %}

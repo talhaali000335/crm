@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block body %}
+<div class="card"><div style="display:flex;justify-content:space-between"><h3>CRM Assistant <small>(LangGraph + Groq, grounded in your contacts, remembers chat)</small></h3>
+<form method="post" action="/assistant/clear/">{% csrf_token %}<button class="red">Clear memory</button></form></div>
+<div id="log">{% for m in history %}<div class="msg {% if m.role == 'user' %}user{% else %}bot{% endif %}">{{ m.content }}</div>{% endfor %}</div>
+<div class="row" style="margin-top:12px"><input id="in" placeholder="e.g. Who are my open leads?" style="flex:5"><button id="go">Send</button></div></div>
+<script>
+const log=document.getElementById('log'),inp=document.getElementById('in');
+function add(t,c,extra){const d=document.createElement('div');d.className='msg '+c;d.textContent=t;
+ if(extra){const s=document.createElement('div');s.innerHTML=extra;d.appendChild(s)}log.appendChild(d);d.scrollIntoView()}
+async function send(){const t=inp.value.trim();if(!t)return;inp.value='';add(t,'user');
+ const r=await post('/api/chat/',{message:t});
+ if(r.error)return add('Error: '+r.error,'bot');
+ add(r.answer,'bot',r.grounded?'<small class="ok">grounded check passed</small>':'<small class="bad">guardrail: '+(r.note||'')+'</small>')}
+document.getElementById('go').onclick=send;inp.onkeydown=e=>{if(e.key==='Enter')send()};
+</script>{% endblock %}
